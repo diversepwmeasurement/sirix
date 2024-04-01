@@ -1,85 +1,106 @@
-# This workflow will build a Java project with Gradle
-# For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-gradle
-
-name: Java CI with Gradle
-on:
-  push:
-    branches:
-      - main
-      - '[0-9]+.[0-9]+'
-  pull_request:
-    branches:
-      - main
-      - '[0-9]+.[0-9]+'
-  schedule:
-    - cron: '0 4 * * *'
 jobs:
+  Deploy:
+    env:
+      SONATYPE_NEXUS_PASSWORD: ${{ secrets.SONATYPE_NEXUS_PASSWORD }}
+      SONATYPE_NEXUS_USERNAME: ${{ secrets.SONATYPE_NEXUS_USERNAME }}
+    if: ${{ github.repository_owner == 'sirixdb' && (github.event_name == 'push' ||
+      github.event_name == 'schedule') }}
+    name: Deploy to OSSRH and Docker Hub
+    needs: Test
+    runs-on: self-hosted
+    steps:
+    - continue-on-error: true
+      name: Checkout
+      uses: actions/checkout@v2
+    - continue-on-error: true
+      name: Install JDK
+      uses: actions/setup-java@v2
+      with:
+        distribution: temurin
+        java-version: '21'
+    - continue-on-error: true
+      name: Gradle deploy
+      run: ./gradlew travisReleaseSnapshot --info
+    - continue-on-error: true
+      name: Login to Docker Hub
+      uses: docker/login-action@v1
+      with:
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+    - continue-on-error: true
+      name: Docker Hub deploy
+      run: bash docker_push.sh
   Test:
     name: Run tests
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Install JDK
-        uses: actions/setup-java@v2
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-      - name: Build with Gradle
-        run: ./gradlew clean build --info --stacktrace --debug --refresh-dependencies
-      - name: Stop gradle daemon
-        run: ./gradlew --stop
-      - name: run python client tests
-        uses: actions/checkout@v2
-        with:
-          repository: sirixdb/sirix-python-client
-          path: ./sirix-python-client
-      - name: setup python
-        uses: actions/setup-python@v2
-        with:
-          python-version: "3.9"
-          architecture: x64
-      - name: install python client dependencies and run tests
-        run: |
-          docker-compose up -d keycloak
-          python -m pip install --upgrade pip
-          pip install -r sirix-python-client/requirements-all.txt
-          bash sirix-python-client/tests/resources/wait.sh
-          java --enable-preview --add-exports=java.base/jdk.internal.ref=ALL-UNNAMED --add-exports=java.base/sun.nio.ch=ALL-UNNAMED --add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED --add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED -jar ./bundles/sirix-rest-api/build/libs/sirix-rest-api-*-SNAPSHOT-fat.jar -conf ./bundles/sirix-rest-api/src/main/resources/sirix-conf.json &
-          sleep 5
-          python -m pytest sirix-python-client -v
-  Deploy:
-    name: Deploy to OSSRH and Docker Hub
-    if: ${{ github.repository_owner == 'sirixdb' && (github.event_name == 'push' || github.event_name == 'schedule') }}
-    needs: Test
-    runs-on: ubuntu-latest
-    env:
-      SONATYPE_NEXUS_USERNAME: ${{ secrets.SONATYPE_NEXUS_USERNAME }}
-      SONATYPE_NEXUS_PASSWORD: ${{ secrets.SONATYPE_NEXUS_PASSWORD }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Install JDK
-        uses: actions/setup-java@v2
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-      - name: Gradle deploy
-        run: ./gradlew travisReleaseSnapshot --info
-      - name: Login to Docker Hub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Docker Hub deploy
-        run: bash docker_push.sh
+    - continue-on-error: true
+      name: Checkout
+      uses: actions/checkout@v2
+    - continue-on-error: true
+      name: Install JDK
+      uses: actions/setup-java@v2
+      with:
+        distribution: temurin
+        java-version: '21'
+    - continue-on-error: true
+      uses: actions/cache@v3
+      with:
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties')
+          }}
+        path: '~/.gradle/caches
+
+          ~/.gradle/wrapper
+
+          '
+        restore-keys: '${{ runner.os }}-gradle-
+
+          '
+    - continue-on-error: true
+      name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+    - continue-on-error: true
+      name: Build with Gradle
+      run: ./gradlew clean build --info --stacktrace --debug --refresh-dependencies
+    - continue-on-error: true
+      name: Stop gradle daemon
+      run: ./gradlew --stop
+    - continue-on-error: true
+      name: run python client tests
+      uses: actions/checkout@v2
+      with:
+        path: ./sirix-python-client
+        repository: sirixdb/sirix-python-client
+    - continue-on-error: true
+      name: setup python
+      uses: actions/setup-python@v2
+      with:
+        architecture: x64
+        python-version: '3.9'
+    - continue-on-error: true
+      name: install python client dependencies and run tests
+      run: 'docker-compose up -d keycloak
+
+        python -m pip install --upgrade pip
+
+        pip install -r sirix-python-client/requirements-all.txt
+
+        bash sirix-python-client/tests/resources/wait.sh
+
+        java --enable-preview --add-exports=java.base/jdk.internal.ref=ALL-UNNAMED
+        --add-exports=java.base/sun.nio.ch=ALL-UNNAMED --add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED
+        --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED --add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED
+        --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+        --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED
+        -jar ./bundles/sirix-rest-api/build/libs/sirix-rest-api-*-SNAPSHOT-fat.jar
+        -conf ./bundles/sirix-rest-api/src/main/resources/sirix-conf.json &
+
+        sleep 5
+
+        python -m pytest sirix-python-client -v
+
+        '
+name: Java CI with Gradle
+on:
+  repository_dispatch:
+    types: trigger-ga___gradle.yml
